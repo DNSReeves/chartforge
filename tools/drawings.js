@@ -1,6 +1,5 @@
 // ChartForge — drawing tools (adapter-free geometry over the primitive API).
-// Anchors live in (barIndex, price) space. Families: lines/channels, pitchfork,
-// gann fan, fibs, shapes, annotations, measure, positions.
+// ALL NINE families, 26 tools. Anchors live in (barIndex, price) space.
 import { distToSegment } from "../engine/primitive.js";
 
 // ── drawing tool geometry (families F1/F2/F4/F5/F6/F8/F9 — §3b) ─────────────
@@ -104,6 +103,88 @@ export function drawTool(t, ctx, vp) {
       ctx.font = "12px system-ui";
       ctx.fillText(t.text || "note", x1, y1);
       break;
+    case "arrow": {
+      line(x1, y1, x2, y2);
+      const ang = Math.atan2(y2 - y1, x2 - x1);
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - 10 * Math.cos(ang - 0.4), y2 - 10 * Math.sin(ang - 0.4));
+      ctx.lineTo(x2 - 10 * Math.cos(ang + 0.4), y2 - 10 * Math.sin(ang + 0.4));
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case "callout": {                        // text + leader line
+      line(x1, y1, x2, y2);
+      ctx.font = "12px system-ui";
+      const msg = t.text || "note";
+      const tw = ctx.measureText(msg).width;
+      ctx.globalAlpha = 0.85; ctx.fillStyle = "#1f2530";
+      ctx.fillRect(x2 - 4, y2 - 16, tw + 8, 20);
+      ctx.globalAlpha = 1; ctx.fillStyle = t.color;
+      ctx.fillText(msg, x2, y2);
+      break;
+    }
+    case "flag":
+      ctx.font = "14px system-ui";
+      ctx.fillText("⚑", x1 - 4, y1);
+      break;
+    case "fibfan": {                         // rays through fib fractions of the a→b move
+      for (const lv of [0.382, 0.5, 0.618]) {
+        const fy = y1 + (y2 - y1) * lv;
+        const dx = x2 - x1, dy = fy - y1;
+        ctx.globalAlpha = 0.6;
+        line(x1, y1, x1 + dx * 4, y1 + dy * 4);
+        ctx.fillText(String(lv), x2 + 4, fy);
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "fibtz": {                          // fib time zones: verticals at 1,2,3,5,8,13,21… bars
+      const span = Math.max(1, Math.round((t.b ? t.b.i : t.a.i + 5) - t.a.i));
+      let f1 = 1, f2 = 1;
+      ctx.globalAlpha = 0.5;
+      for (let k = 0; k < 10; k++) {
+        const x = X(t.a.i + f1 * span);
+        if (x > w) break;
+        line(x, 0, x, h);
+        [f1, f2] = [f2, f1 + f2];
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "gannbox": {                        // rect + fib splits both axes
+      const L = Math.min(x1, x2), R = Math.max(x1, x2), T2 = Math.min(y1, y2), B = Math.max(y1, y2);
+      ctx.strokeRect(L, T2, R - L, B - T2);
+      ctx.globalAlpha = 0.4;
+      for (const f of [0.25, 0.382, 0.5, 0.618, 0.75]) {
+        line(L, T2 + (B - T2) * f, R, T2 + (B - T2) * f);
+        line(L + (R - L) * f, T2, L + (R - L) * f, B);
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "schiff": {                         // schiff pitchfork: median origin = midpoint(a,b)
+      const cx = t.c ? X(t.c.i) : x2, cy = t.c ? Y(t.c.p) : y2;
+      const ox = (x1 + x2) / 2, oy = (y1 + y2) / 2;
+      const mx = (x2 + cx) / 2, my = (y2 + cy) / 2;
+      const dx = mx - ox, dy = my - oy;
+      const ext = dx !== 0 ? (w - ox) / dx : 1;
+      line(ox, oy, ox + dx * ext, oy + dy * ext);
+      line(x2, y2, x2 + dx * ext, y2 + dy * ext);
+      line(cx, cy, cx + dx * ext, cy + dy * ext);
+      break;
+    }
+    case "xabcd": case "elliott": {          // pattern markup: labeled polyline
+      const pts = t.pts || [];
+      if (!pts.length) break;
+      const labels = t.kind === "xabcd" ? ["X", "A", "B", "C", "D"] : ["1", "2", "3", "4", "5"];
+      ctx.beginPath(); ctx.moveTo(X(pts[0].i), Y(pts[0].p));
+      for (let k = 1; k < pts.length; k++) ctx.lineTo(X(pts[k].i), Y(pts[k].p));
+      ctx.stroke();
+      ctx.font = "11px system-ui";
+      pts.forEach((pt2, k) => ctx.fillText(labels[k] || String(k + 1), X(pt2.i) + 4, Y(pt2.p) - 4));
+      break;
+    }
     case "long": case "short": {             // F9 position: entry→target/stop + R:R
       const entry = t.a.p, target = t.b ? t.b.p : entry * (t.kind === "long" ? 1.05 : 0.95);
       const stop = t.c ? t.c.p : entry * (t.kind === "long" ? 0.97 : 1.03);
@@ -139,5 +220,8 @@ export const TOOLS = [["✋", null, "pan"], ["╱", "trend", "trend line"], ["�
   ["🜄", "pitchfork", "pitchfork"], ["𝄩", "gannfan", "gann fan"], ["𝔽", "fib", "fib retracement"],
   ["𝔼", "fibext", "fib extension"], ["▭", "rect", "rectangle"], ["◯", "ellipse", "ellipse"],
   ["✎", "polyline", "polyline"], ["T", "text", "text"], ["⇲", "measure", "measure (stats)"],
+  ["➹", "arrow", "arrow"], ["💬", "callout", "callout"], ["⚑", "flag", "flag"],
+  ["𝘍", "fibfan", "fib fan"], ["𝆕", "fibtz", "fib time zones"], ["⊞", "gannbox", "gann box"],
+  ["🜃", "schiff", "schiff pitchfork"], ["X", "xabcd", "XABCD pattern"], ["5", "elliott", "elliott waves"],
   ["▲", "long", "long position"], ["▼", "short", "short position"]];
 

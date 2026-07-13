@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 — 2026-07-13
+
+- **All nine drawing families complete (26 tools)**: added arrow, callout, flag,
+  Fibonacci fan, Fibonacci time zones, Gann box, Schiff pitchfork, and XABCD /
+  Elliott labeled pattern markup — all pure geometry over the existing primitive
+  API (no engine change).
+
 ## 0.1.0 — 2026-07-13
 
 Initial public release, extracted from the private platform after the benchmark gate
