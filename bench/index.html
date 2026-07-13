@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChartForge §2c bench</title>
+<style>
+  body { margin: 0; background: #0e1116; color: #d7dde6;
+         font: 13px -apple-system, system-ui, sans-serif; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .cell h3 { margin: 4px 0; font-size: 13px; }
+  .chart { height: 46vh; min-height: 260px; background: #0e1116; border: 1px solid #2a3140; }
+  #controls { padding: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { background: #1f2530; color: inherit; border: 1px solid #2a3140;
+           border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  #out { white-space: pre; font-family: ui-monospace, monospace; font-size: 12px; padding: 8px; }
+</style>
+</head>
+<body>
+<div id="controls">
+  <b>ChartForge §2c benchmark</b>
+  <button id="run10k">run 10K candles</button>
+  <button id="run30k">run 30K intraday</button>
+  <span id="status"></span>
+</div>
+<div class="grid">
+  <div class="cell"><h3>ChartForge Engine (house)</h3><div id="cf" class="chart"></div></div>
+  <div class="cell"><h3>Lightweight v5 (bench reference — BENCH-ONLY vendor)</h3><div id="lw" class="chart"></div></div>
+</div>
+<div id="out"></div>
+
+<script src="/chartforge/bench/vendor/lightweight-charts.standalone.production.js"></script>
+<script type="module">
+import { createChart } from "/chartforge/engine/index.js";
+
+// ── seeded synthetic OHLCV (identical data for both engines) ─────────────────
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0;
+  let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function genBars(n, seed = 42, intraday = false) {
+  const rnd = mulberry32(seed);
+  const bars = [];
+  let px = 100, t = intraday ? 1700000000 : 900000000;
+  const dt = intraday ? 60 : 86400;
+  for (let i = 0; i < n; i++) {
+    const drift = (rnd() - 0.48) * 0.02 * px;
+    const open = px;
+    const close = Math.max(1, px + drift);
+    const hi = Math.max(open, close) * (1 + rnd() * 0.008);
+    const lo = Math.min(open, close) * (1 - rnd() * 0.008);
+    bars.push({ time: t, open, high: hi, low: lo, close, volume: 1e5 + rnd() * 9e5 });
+    px = close; t += dt;
+  }
+  return bars;
+}
+
+// ── engines ──────────────────────────────────────────────────────────────────
+const cfHost = document.getElementById("cf");
+const lwHost = document.getElementById("lw");
+let cf = null, lw = null, lwSeries = null, cfSeries = null;
+
+function buildCF(bars) {
+  if (cf) { cf.remove(); }
+  cf = createChart(cfHost, { theme: "dark" });
+  const volPane = cf.addPane(0.22);
+  cfSeries = cf.addSeries("candles", { pane: 0 });
+  const v = cf.addSeries("volume", { pane: volPane });
+  cfSeries.setData(bars); v.setData(bars);
+  return cf;
+}
+function buildLW(bars) {
+  if (lw) { lw.remove(); }
+  lw = LightweightCharts.createChart(lwHost, {
+    layout: { background: { color: "#0e1116" }, textColor: "#8a94a6" },
+    grid: { vertLines: { color: "rgba(138,148,166,.14)" }, horzLines: { color: "rgba(138,148,166,.14)" } },
+    autoSize: true,
+  });
+  lwSeries = lw.addSeries(LightweightCharts.CandlestickSeries);
+  lwSeries.setData(bars.map(b => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
+  const vol = lw.addSeries(LightweightCharts.HistogramSeries, { priceScaleId: "vol" }, 1);
+  vol.setData(bars.map(b => ({ time: b.time, value: b.volume,
+    color: b.close >= b.open ? "rgba(38,166,154,.45)" : "rgba(239,83,80,.45)" })));
+  return lw;
+}
+
+// ── measurement: scripted inertial-style pan for N ms, count rAF frames ──────
+function measureFPS(panFn, ms = 2500) {
+  return new Promise((resolve) => {
+    let frames = 0, worst = 0, last = performance.now();
+    const t0 = last;
+    let dir = -1, x = 0;
+    function tick(now) {
+      const dt = now - last; last = now;
+      if (dt > worst && frames > 2) worst = dt;
+      frames++;
+      // scripted pan sweep (~500 px/s, reversing) — the inertial-pan proxy
+      const step = 0.5 * dt * dir;
+      x += step;
+      if (Math.abs(x) > 400) dir = -dir;
+      panFn(step);
+      if (now - t0 < ms) requestAnimationFrame(tick);
+      else resolve({ fps: +(frames / ((now - t0) / 1000)).toFixed(1), worst_ms: +worst.toFixed(1) });
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+async function firstPaint(build, bars) {
+  const t0 = performance.now();
+  build(bars);
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  return +(performance.now() - t0).toFixed(0);
+}
+
+async function run(n, intraday) {
+  const status = document.getElementById("status");
+  const bars = genBars(n, 42, intraday);
+  status.textContent = `running ${n} bars…`;
+  const out = { n, ua: navigator.userAgent.slice(0, 60) };
+
+  out.cf_first_paint_ms = await firstPaint(buildCF, bars);
+  await new Promise(r => setTimeout(r, 250));
+  out.cf = await measureFPS((dx) => { cf.ts.panPx(dx); cf.ts.clamp(n); cf.requestDraw("scale"); });
+
+  out.lw_first_paint_ms = await firstPaint(buildLW, bars);
+  await new Promise(r => setTimeout(r, 250));
+  const lwTs = lw.timeScale();
+  out.lw = await measureFPS((dx) => { lwTs.scrollToPosition(lwTs.scrollPosition() - dx / 8, false); });
+
+  out.verdict = {
+    fps_gate: out.cf.fps >= out.lw.fps * 0.95 ? "PASS" : "FAIL",
+    first_paint_gate: out.cf_first_paint_ms <= Math.max(150, out.lw_first_paint_ms * 1.2) ? "PASS" : "FAIL",
+  };
+  document.getElementById("out").textContent += JSON.stringify(out, null, 1) + "\n";
+  status.textContent = `done ${n}: CF ${out.cf.fps}fps vs LW ${out.lw.fps}fps → ${out.verdict.fps_gate}`;
+  (window.__BENCH = window.__BENCH || []).push(out);
+  return out;
+}
+
+document.getElementById("run10k").onclick = () => run(10000, false);
+document.getElementById("run30k").onclick = () => run(30000, true);
+
+if (new URLSearchParams(location.search).get("auto")) {
+  (async () => {
+    await run(10000, false);
+    await run(30000, true);
+    window.__BENCH_DONE = true;
+  })();
+}
+</script>
+</body>
+</html>

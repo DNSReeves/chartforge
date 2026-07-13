@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChartForge demo</title>
+<style>
+  body { margin: 0; background: #0e1116; color: #d7dde6; font: 13px system-ui; }
+  header { padding: 10px 14px; } header b { font-size: 15px; }
+  #chart { height: 70vh; min-height: 380px; margin: 0 8px; border: 1px solid #2a3140; }
+  p { padding: 0 14px; color: #8a94a6; max-width: 720px; }
+  a { color: #4ea1ff; }
+</style>
+</head>
+<body>
+<header><b>ChartForge</b> — zero-dependency canvas charting, no build step.</header>
+<div id="chart"></div>
+<p>10,000 seeded synthetic candles + volume. Drag to pan (with inertia), wheel/pinch to
+zoom, double-tap to fit, hover/press-hold for the crosshair. A sample trend line is
+drawn through the primitive API. Performance receipts live in <a href="../bench/index.html">the bench harness</a> —
+run them in your own browser.</p>
+<script type="module">
+import { createChart, TrendLine } from "../engine/index.js";
+
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0;
+  let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = mulberry32(42);
+const bars = [];
+let px = 100, t = 900000000;
+for (let i = 0; i < 10000; i++) {
+  const open = px, close = Math.max(1, px + (rnd() - 0.48) * 0.02 * px);
+  bars.push({ time: t, open, close,
+    high: Math.max(open, close) * (1 + rnd() * 0.008),
+    low: Math.min(open, close) * (1 - rnd() * 0.008),
+    volume: 1e5 + rnd() * 9e5 });
+  px = close; t += 86400;
+}
+const chart = createChart(document.getElementById("chart"), { theme: "dark" });
+const volPane = chart.addPane(0.2);
+chart.addSeries("candles", { pane: 0 }).setData(bars);
+chart.addSeries("volume", { pane: volPane }).setData(bars);
+chart.panes[0].primitives.push(new TrendLine(9600, bars[9600].low * 0.99, 9950, bars[9950].high * 0.99));
+</script>
+</body>
+</html>
