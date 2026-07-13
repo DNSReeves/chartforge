@@ -135,4 +135,91 @@ export function drawVolume(ctx, buf, ts, ps, colors = DEFAULT_COLORS) {
   }
 }
 
-export const RENDERERS = { candles: drawCandles, line: drawLine, area: drawArea, volume: drawVolume };
+/** OHLC bars (open tick left, close tick right) — the classic Western bar. */
+export function drawBars(ctx, buf, ts, ps, colors = DEFAULT_COLORS) {
+  const [a, b] = ts.range(buf.n);
+  if (b < a) return;
+  const O = buf.open, H = buf.high, L = buf.low, C = buf.close;
+  const tick = Math.max(1, Math.min(ts.barWidth() * 0.35, 12));
+  for (const dir of [0, 1]) {
+    ctx.beginPath();
+    ctx.strokeStyle = dir ? colors.down : colors.up;
+    ctx.lineWidth = 1;
+    for (let i = a; i <= b; i++) {
+      const up = C[i] >= O[i];
+      if ((dir === 0) !== up) continue;
+      const x = Math.round(ts.xForIndex(i)) + 0.5;
+      ctx.moveTo(x, Math.round(ps.yForPrice(H[i])));
+      ctx.lineTo(x, Math.round(ps.yForPrice(L[i])));
+      const yo = Math.round(ps.yForPrice(O[i])) + 0.5;
+      ctx.moveTo(x - tick, yo); ctx.lineTo(x, yo);
+      const yc = Math.round(ps.yForPrice(C[i])) + 0.5;
+      ctx.moveTo(x, yc); ctx.lineTo(x + tick, yc);
+    }
+    ctx.stroke();
+  }
+}
+
+/** Step line (close held until the next bar) — the "how it actually traded" view. */
+export function drawStep(ctx, buf, ts, ps, colors = DEFAULT_COLORS) {
+  const [a, b] = ts.range(buf.n);
+  if (b < a) return;
+  const C = buf.close;
+  const color = typeof colors === "string" ? colors : (colors && colors.line) || DEFAULT_COLORS.line;
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.6;
+  let pen = false;
+  for (let i = a; i <= b; i++) {
+    const v = C[i];
+    if (!Number.isFinite(v)) { pen = false; continue; }
+    const x0 = ts.xForIndex(i) - ts.barWidth() / 2, x1 = x0 + ts.barWidth(), y = ps.yForPrice(v);
+    if (!pen) { ctx.moveTo(x0, y); pen = true; } else { ctx.lineTo(x0, y); }
+    ctx.lineTo(x1, y);
+  }
+  ctx.stroke();
+}
+
+/** Scatter (one dot per close) — sparse/irregular data, or a de-cluttered view. */
+export function drawScatter(ctx, buf, ts, ps, colors = DEFAULT_COLORS) {
+  const [a, b] = ts.range(buf.n);
+  if (b < a) return;
+  const C = buf.close;
+  const color = typeof colors === "string" ? colors : (colors && colors.line) || DEFAULT_COLORS.line;
+  const r = Math.max(1, Math.min(ts.barWidth() * 0.22, 3.5));
+  ctx.beginPath(); ctx.fillStyle = color;
+  for (let i = a; i <= b; i++) {
+    const v = C[i];
+    if (!Number.isFinite(v)) continue;
+    ctx.moveTo(ts.xForIndex(i) + r, ps.yForPrice(v));
+    ctx.arc(ts.xForIndex(i), ps.yForPrice(v), r, 0, Math.PI * 2);
+  }
+  ctx.fill();
+}
+
+/** Baseline: green above the first visible close, red below (relative-performance read). */
+export function drawBaseline(ctx, buf, ts, ps, colors = DEFAULT_COLORS) {
+  const [a, b] = ts.range(buf.n);
+  if (b < a) return;
+  const C = buf.close;
+  const base = C[a];
+  const yBase = ps.yForPrice(base);
+  for (const above of [true, false]) {
+    ctx.beginPath();
+    ctx.moveTo(ts.xForIndex(a), yBase);
+    for (let i = a; i <= b; i++) {
+      const v = Number.isFinite(C[i]) ? C[i] : base;
+      const y = ps.yForPrice(v);
+      ctx.lineTo(ts.xForIndex(i), above ? Math.min(y, yBase) : Math.max(y, yBase));
+    }
+    ctx.lineTo(ts.xForIndex(b), yBase);
+    ctx.closePath();
+    ctx.fillStyle = above ? "rgba(38,166,154,.25)" : "rgba(239,83,80,.25)";
+    ctx.fill();
+  }
+  drawLine(ctx, buf, ts, ps, colors);
+  ctx.beginPath(); ctx.strokeStyle = "rgba(138,148,166,.6)"; ctx.setLineDash([4, 4]);
+  ctx.moveTo(0, yBase); ctx.lineTo(ts.widthPx, yBase); ctx.stroke(); ctx.setLineDash([]);
+}
+
+export const RENDERERS = { candles: drawCandles, bars: drawBars, line: drawLine, step: drawStep,
+                           area: drawArea, scatter: drawScatter, baseline: drawBaseline,
+                           volume: drawVolume };

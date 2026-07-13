@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 — 2026-07-13
+
+**Four new price renderers**: `bars` (OHLC), `step`, `scatter`, and `baseline`
+(shaded green above / red below the first visible close). The full set is now
+candles · bars · line · step · area · scatter · baseline · volume, all switchable
+through `addSeries(type)`.
+
 ## 0.2.2 — 2026-07-13
 
 **Fix: sparse series (indicator overlays) drew shifted and short.** The engine draws by
