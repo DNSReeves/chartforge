@@ -30,7 +30,7 @@ browser. Claims that can't be reproduced don't belong in a README.
   - SoA `Float64Array` series buffers (no per-point objects)
   - index-space time scale (bar index ↔ px; timestamps only at the axis labeler —
     gaps/sessions/mixed granularity come free)
-  - linear + log price scales with nice ticks
+  - linear · log · percent price scales with nice ticks
   - three stacked canvases per pane, layer-selective dirty redraw
   - per-style path batching; sub-pixel bars collapse to 1px ticks, sub-pixel lines
     decimate to per-column min/max

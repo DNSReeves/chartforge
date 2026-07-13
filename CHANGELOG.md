@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.1 — 2026-07-13
+
+**`percent` price scale** — a third `PriceScale` mode alongside `linear` and `log`.
+Set a reference price with `setBase()` and the axis re-bases to it, reading as % from
+that bar (ticks label `+100.0%`; `yForPrice`/`priceForY` round-trip exactly). A
+relative-performance read on a single series without touching the data.
+
+```js
+const ps = chart.panes[0].ps;
+ps.mode = "percent";
+ps.setBase(bars[0].close);   // axis now reads % from the first visible bar
+```
+
+**Fix: log-scale tick labels printed 4 decimals** (`500.0000`). The log branch called
+`fmtPrice(v)` without a step argument, so the formatter fell through to its finest
+precision. It now passes the tick spacing.
+
 ## 0.3.0 — 2026-07-13
 
 **Four new price renderers**: `bars` (OHLC), `step`, `scatter`, and `baseline`
