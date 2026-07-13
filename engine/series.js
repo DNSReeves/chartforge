@@ -51,8 +51,14 @@ export function drawCandles(ctx, buf, ts, ps, colors = DEFAULT_COLORS) {
   }
 }
 
-/** Line on close (one path). */
-export function drawLine(ctx, buf, ts, ps, color = DEFAULT_COLORS.line, width = 1.6) {
+/** Line on close (one path).
+ * COLOR-CONTRACT (fix 2026-07-13): the RENDERERS dispatch hands every series its
+ * colors OBJECT, but this took a color STRING — so a `line` series stroked with
+ * an object, canvas fell back to BLACK, and every line (compare overlays AND
+ * indicator series) drew invisibly on a dark theme. Accept both shapes. */
+export function drawLine(ctx, buf, ts, ps, colors = DEFAULT_COLORS, width = 1.6) {
+  const color = typeof colors === "string" ? colors
+              : (colors && colors.line) || DEFAULT_COLORS.line;
   const [a, b] = ts.range(buf.n);
   if (b < a) return;
   const C = buf.close;

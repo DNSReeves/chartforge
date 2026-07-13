@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — 2026-07-13
+
+**Fix (important): line series were rendering black/invisible.** The renderer
+dispatch passes each series its colors *object*, but `drawLine()` declared a color
+*string* — so any `line` series stroked with an object, canvas fell back to black,
+and lines vanished on dark themes. `drawLine()` now accepts either shape. Affects
+every line series (overlays, indicator lines, comparison series). Candles, area and
+volume were unaffected.
+
 ## 0.2.0 — 2026-07-13
 
 - **All nine drawing families complete (26 tools)**: added arrow, callout, flag,
