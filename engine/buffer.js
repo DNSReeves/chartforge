@@ -64,8 +64,9 @@ export class SeriesBuffer {
     let mn = Infinity, mx = -Infinity;
     const lo = this.low, hi = this.high;
     for (let i = Math.max(0, i0); i <= Math.min(this.n - 1, i1); i++) {
-      if (lo[i] < mn) mn = lo[i];
-      if (hi[i] > mx) mx = hi[i];
+      // sparse series (indicator warmups) carry NaN — they must not poison the scale
+      if (Number.isFinite(lo[i]) && lo[i] < mn) mn = lo[i];
+      if (Number.isFinite(hi[i]) && hi[i] > mx) mx = hi[i];
     }
     return mn <= mx ? [mn, mx] : [0, 1];
   }

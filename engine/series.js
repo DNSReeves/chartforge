@@ -69,8 +69,18 @@ export function drawLine(ctx, buf, ts, ps, colors = DEFAULT_COLORS, width = 1.6)
   // decimate: at sub-pixel density plot min/max per pixel column to keep shape
   const bw = ts.barWidth();
   if (bw >= 0.5) {
-    ctx.moveTo(ts.xForIndex(a), ps.yForPrice(C[a]));
-    for (let i = a + 1; i <= b; i++) ctx.lineTo(ts.xForIndex(i), ps.yForPrice(C[i]));
+    // GAP-AWARE (2026-07-13): a series may be SPARSE against the shared index space
+    // (an SMA(50) has no value for its first 49 bars). Non-finite points break the
+    // path instead of drawing a line to zero — and, critically, the series can now be
+    // ALIGNED to the price bars, so it ends where the price ends.
+    let pen = false;
+    for (let i = a; i <= b; i++) {
+      const v = C[i];
+      if (!Number.isFinite(v)) { pen = false; continue; }
+      const x = ts.xForIndex(i), y = ps.yForPrice(v);
+      pen ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      pen = true;
+    }
   } else {
     const perPx = 1 / bw;
     for (let x = 0; x < ts.widthPx; x++) {

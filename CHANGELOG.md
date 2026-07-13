@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2 — 2026-07-13
+
+**Fix: sparse series (indicator overlays) drew shifted and short.** The engine draws by
+bar INDEX, so a series with fewer points than the price series (an SMA(50) has no value
+for its first 49 bars) had point 0 land on bar 0 — the line was shifted left by its
+warmup and ended short of the right edge. `drawLine()` is now **gap-aware** (non-finite
+values break the path instead of drawing to zero) and `SeriesBuffer.minMax()` ignores
+NaN, so a consumer can align a sparse series to the shared index space by padding the
+gaps with NaN.
+
 ## 0.2.1 — 2026-07-13
 
 **Fix (important): line series were rendering black/invisible.** The renderer
